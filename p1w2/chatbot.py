@@ -1,14 +1,17 @@
-import requests
 import os
+
+import requests
 from dotenv import load_dotenv
 from groq import Groq
 from huggingface_hub import InferenceClient
+
 
 def load_api_key():
     # Load the API key from environment
     load_dotenv()
     hugging_face_token = os.getenv("HUGGING_FACE_API_KEY")
     return hugging_face_token
+
 
 def get_models():
     # Return the models as lists
@@ -32,6 +35,7 @@ def get_models():
     ]
     return models
 
+
 def select_model():
     valid_choices = [1, 2, 3, 4, 5, 6]
     models = get_models()
@@ -54,12 +58,15 @@ def select_model():
         except ValueError:
             print("Invalid input. Please enter a number.")
 
+
 def enter_prompt(user_choice, hugging_face_token):
     models = get_models()
 
     while True:
         print(f"You are talking with {models[1][user_choice - 1]}")
-        print("If you want to select another model, enter 'RETURN' in the place of the prompt.")
+        print(
+            "If you want to select another model, enter 'RETURN' in the place of the prompt."
+        )
 
         user_prompt = input("Please enter a prompt:")
         print("\n")
@@ -89,18 +96,20 @@ def enter_prompt(user_choice, hugging_face_token):
                 print(message.choices[0].delta.content, end="")
             print("\n")
 
+
 def main():
     # Load API keys
     hugging_face_token = load_api_key()
 
     print("\n****Welcome to Group 4 AI chatbot****\n")
-    
+
     while True:
         # Select a model
         user_choice = select_model()
-        
+
         # Enter prompt and interact with the model
         enter_prompt(user_choice, hugging_face_token)
+
 
 # Run the program
 if __name__ == "__main__":
