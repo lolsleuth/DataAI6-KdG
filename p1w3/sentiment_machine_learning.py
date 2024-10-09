@@ -4,23 +4,25 @@ This script is for sentiment analysis using machine learning.
 
 import pandas as pd
 import spacy
+import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
-df = pd.read_csv('SentimentAssignmentReviewCorpus.csv')
+df = pd.read_csv("SentimentAssignmentReviewCorpus.csv")
 
-nlp = spacy.load('en_core_web_sm')
+nlp = spacy.load("en_core_web_sm")
 
 # Load the BERT model and tokenizer for sentiment analysis
 sentiment_model_path = "nlptown/bert-base-multilingual-uncased-sentiment"
 sentiment_tokenizer = AutoTokenizer.from_pretrained(sentiment_model_path)
-sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_path)
+sentiment_model = AutoModelForSequenceClassification.from_pretrained(
+    sentiment_model_path
+)
 
 # Sentiment analysis pipeline using the BERT model
 sentiment_analysis_pipeline = pipeline(
-    "sentiment-analysis",
-    model=sentiment_model,
-    tokenizer=sentiment_tokenizer,
+    "sentiment-analysis", model=sentiment_model, tokenizer=sentiment_tokenizer, device=0
 )
+
 
 def extract_aspects_auto(review_text):
     """
@@ -32,6 +34,7 @@ def extract_aspects_auto(review_text):
     doc = nlp(review_text)
     aspects = [token.text for token in doc if token.pos_ == "VERB"]
     return aspects
+
 
 # Class to store and print sentiment analysis results
 class SentimentResult:
@@ -49,6 +52,7 @@ class SentimentResult:
         for aspect, sentiment in self.aspect_sentiments.items():
             result += f"  Aspect: {aspect} - Sentiment: {sentiment['label']} (Score: {sentiment['score']:.2f})\n"
         return result
+
 
 def analyze_review_aspects_auto(review_title, review_body, sentiment_pipeline):
     """
@@ -69,17 +73,27 @@ def analyze_review_aspects_auto(review_title, review_body, sentiment_pipeline):
         sentiment = sentiment_pipeline(f"{aspect}: {review_text}")[0]
         aspect_sentiments[aspect] = {
             "label": sentiment["label"],
-            "score": sentiment["score"]
+            "score": sentiment["score"],
         }
 
-    return SentimentResult(review_title, review_body, aspect_sentiments, overall_sentiment)
+    return SentimentResult(
+        review_title, review_body, aspect_sentiments, overall_sentiment
+    )
 
-# Analyze the sentiment of each review in the dataframe
-df['sentiment_results'] = df.apply(
-    lambda row: analyze_review_aspects_auto(row['reviewTitle'], row['reviewBody'], sentiment_analysis_pipeline), axis=1
-)
+
+# Create a list to store sentiment results
+sentiment_results = []
+
+# Use tqdm to track progress across the entire dataset
+for index, row in tqdm.tqdm(df.iterrows(), total=len(df), desc="Processing reviews"):
+    sentiment_result = analyze_review_aspects_auto(
+        row["reviewTitle"], row["reviewBody"], sentiment_analysis_pipeline
+    )
+    sentiment_results.append(sentiment_result)
+
+# Store the results back into the DataFrame
+df["sentiment_results"] = sentiment_results
 
 # Print the sentiment results
-for sentiment_result in df['sentiment_results']:
+for sentiment_result in sentiment_results:
     print(sentiment_result)
-
