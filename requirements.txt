@@ -7,3 +7,4 @@ torch
 accelerate
 spacy
 pandas
+tqdm
