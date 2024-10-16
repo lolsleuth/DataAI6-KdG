@@ -1,42 +1,53 @@
-"""
-This script is for sentiment analysis using machine learning.
-"""
-
 import pandas as pd
 import spacy
-import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
+import requests
+import tqdm
 
-df = pd.read_csv("SentimentAssignmentReviewCorpus.csv")
-
+# Load spaCy model for aspect extraction
 nlp = spacy.load("en_core_web_sm")
 
-# Load the BERT model and tokenizer for sentiment analysis
+# Load the sentiment analysis model (BERT)
 sentiment_model_path = "nlptown/bert-base-multilingual-uncased-sentiment"
 sentiment_tokenizer = AutoTokenizer.from_pretrained(sentiment_model_path)
-sentiment_model = AutoModelForSequenceClassification.from_pretrained(
-    sentiment_model_path
-)
+sentiment_model = AutoModelForSequenceClassification.from_pretrained(sentiment_model_path)
 
-# Sentiment analysis pipeline using the BERT model
+# Create the sentiment analysis pipeline
 sentiment_analysis_pipeline = pipeline(
     "sentiment-analysis", model=sentiment_model, tokenizer=sentiment_tokenizer, device=0
 )
 
+URL = "http://localhost:11434/api"  # The updated API URL
 
 def extract_aspects_auto(review_text):
     """
-    Params: review_text (str) - the text of the review
-    Returns: aspects (list) - a list of aspects found in
-
-    This function uses the spaCy library to extract aspects (verbs) from the review text.
+    Extract aspects (verbs) from the review text.
     """
     doc = nlp(review_text)
     aspects = [token.text for token in doc if token.pos_ == "VERB"]
     return aspects
 
+def perform_sentiment_analysis(review_text, sentiment_pipeline):
+    """
+    Perform overall and aspect-based sentiment analysis.
+    """
+    # Extract aspects (verbs) using spaCy
+    found_aspects = extract_aspects_auto(review_text)
+    aspect_sentiments = {}
 
-# Class to store and print sentiment analysis results
+    # Get the overall sentiment of the review
+    overall_sentiment = sentiment_pipeline(review_text)[0]
+
+    # Perform sentiment analysis on each extracted aspect
+    for aspect in found_aspects:
+        sentiment = sentiment_pipeline(f"{aspect}: {review_text}")[0]
+        aspect_sentiments[aspect] = {
+            "label": sentiment["label"],
+            "score": sentiment["score"],
+        }
+
+    return overall_sentiment, aspect_sentiments
+
 class SentimentResult:
     def __init__(self, review_title, review_body, aspect_sentiments, overall_sentiment):
         self.review_title = review_title
@@ -53,47 +64,50 @@ class SentimentResult:
             result += f"  Aspect: {aspect} - Sentiment: {sentiment['label']} (Score: {sentiment['score']:.2f})\n"
         return result
 
-
-def analyze_review_aspects_auto(review_title, review_body, sentiment_pipeline):
+def analyze_reviews(df, sentiment_pipeline):
     """
-    Params: review_title (str) - the title of the review text
-            review_body (str) - the body of the review text
-            sentiment_pipeline (pipeline) - the sentiment analysis pipeline
-    Returns: SentimentResult - a class instance containing the sentiment analysis results
-
-    This function analyzes the sentiment of the review text, extracting aspects automatically using spaCy.
+    Analyze reviews from a DataFrame, perform sentiment analysis on each, and return results.
     """
-    review_text = f"{review_title}. {review_body}"
-    found_aspects = extract_aspects_auto(review_text)
-    aspect_sentiments = {}
+    sentiment_results = []
 
-    overall_sentiment = sentiment_pipeline(review_text)[0]
+    # Iterate over the reviews in the DataFrame
+    for index, row in tqdm.tqdm(df.iterrows(), total=len(df), desc="Processing reviews"):
+        review_title = row["reviewTitle"]
+        review_body = row["reviewBody"]
+        review_text = f"{review_title}. {review_body}"
 
-    for aspect in found_aspects:
-        sentiment = sentiment_pipeline(f"{aspect}: {review_text}")[0]
-        aspect_sentiments[aspect] = {
-            "label": sentiment["label"],
-            "score": sentiment["score"],
-        }
+        # Perform sentiment analysis
+        overall_sentiment, aspect_sentiments = perform_sentiment_analysis(review_text, sentiment_pipeline)
 
-    return SentimentResult(
-        review_title, review_body, aspect_sentiments, overall_sentiment
-    )
+        # Store the sentiment results
+        sentiment_result = SentimentResult(review_title, review_body, aspect_sentiments, overall_sentiment)
+        sentiment_results.append(sentiment_result)
 
+    return sentiment_results
 
-# Create a list to store sentiment results
-sentiment_results = []
+def chat_with_api(review_text):
+    """
+    Chat with the local LLM via the provided API and get a response.
+    """
+    data = {"prompt": review_text}
 
-# Use tqdm to track progress across the entire dataset
-for index, row in tqdm.tqdm(df.iterrows(), total=len(df), desc="Processing reviews"):
-    sentiment_result = analyze_review_aspects_auto(
-        row["reviewTitle"], row["reviewBody"], sentiment_analysis_pipeline
-    )
-    sentiment_results.append(sentiment_result)
+    # Make request to local LLM API (Ollama) to analyze the review
+    response = requests.post(URL, json=data)
+    if response.status_code == 200:
+        return response.json().get("reply", "")
+    else:
+        return "Error: Unable to get response from the API."
 
-# Store the results back into the DataFrame
-df["sentiment_results"] = sentiment_results
+# Load reviews from CSV
+df = pd.read_csv("SentimentAssignmentReviewCorpus.csv")
 
-# Print the sentiment results
-for sentiment_result in sentiment_results:
+# Analyze the reviews
+sentiment_results = analyze_reviews(df, sentiment_analysis_pipeline)
+
+# Print the sentiment results and simulate chatbot interaction
+for sentiment_result in sentiment_results[:9]:  # Only process the top 9 rows
     print(sentiment_result)
+
+    # Simulate sending the review to the local LLM for analysis
+    llm_response = chat_with_api(f"{sentiment_result.review_title}. {sentiment_result.review_body}")
+    print(f"LLM Response: {llm_response}\n")
