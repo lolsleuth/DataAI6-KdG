@@ -3,9 +3,9 @@ import requests
 import json
 import tqdm
 
-URL = "http://localhost:11434/api/generate"  # Updated to match the working example
+URL = "http://localhost:11434/api/generate"  
 headers = {"Content-Type": "application/json"}  # Specify JSON headers
-model_name = "llama3.1:latest"
+model_name = "llama3.2:latest"
 
 class SentimentResult:
     def __init__(self, review_title, review_body, llm_response):
@@ -21,14 +21,20 @@ class SentimentResult:
 
 def chat_with_llm(review_title, review_body):
     """
-    Send the review title and body to the local LLM for sentiment analysis using streaming.
+    Send the review title and body to the local LLM for sentiment analysis
+    Streaming is turned on
     """
     review_text = f"""Analyze the following review and identify sentiments for each aspect mentioned. Provide the sentiment label (Positive, Negative, Neutral) and score (0.0 to 1.0) for each aspect only. 
-        Don't provide the reason, note or anything else except the sentiment label and score. Don't include aspects that are not mentioned in the review.
+        Don't provide the reason, note or anything else except the:
+        - number of the comment
+        - title 
+        - body
+        - each aspect sentiment label and score for the aspect.
+        Don't include aspects that are not mentioned in the review.
         Title: {review_title}
         Body: {review_body}
+        also provide the previous comments title.
         """
-    # Note: this prompt still provides reasoning sometimes it could be not neccessary
 
     data = {"model": model_name, "prompt": review_text, "stream": True}
 
@@ -40,7 +46,7 @@ def chat_with_llm(review_title, review_body):
                 partial_word = ""  # Accumulate incomplete words
                 print("LLM Response: ", end="", flush=True)
 
-                # Process the response in chunks (streaming)
+                # Process the response in chunks
                 for chunk in response.iter_lines():
                     if chunk:
                         data = json.loads(chunk.decode("utf-8"))
@@ -96,6 +102,6 @@ df = pd.read_csv("p1w3/SentimentAssignmentReviewCorpus.csv")
 # Analyze the reviews using the LLM API
 sentiment_results = analyze_reviews(df)
 
-# Print the sentiment results for the top rows
-for sentiment_result in sentiment_results[:3]:  
+# Print the sentiment results (if testing use some top rows)
+for sentiment_result in sentiment_results[:5]:
     print(sentiment_result)
