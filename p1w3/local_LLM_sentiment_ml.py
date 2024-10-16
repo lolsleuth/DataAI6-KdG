@@ -23,10 +23,13 @@ def chat_with_llm(review_title, review_body):
     """
     Send the review title and body to the local LLM for sentiment analysis using streaming.
     """
-    review_text = f"""Analyze the following review and identify sentiments for each aspect mentioned. Provide the sentiment label (Positive, Negative, Neutral) and score (0.0 to 1.0) for each aspect only.
+    review_text = f"""Analyze the following review and identify sentiments for each aspect mentioned. Provide the sentiment label (Positive, Negative, Neutral) and score (0.0 to 1.0) for each aspect only. 
+        Don't provide the reason, note or anything else except the sentiment label and score. Don't include aspects that are not mentioned in the review.
         Title: {review_title}
         Body: {review_body}
         """
+    # Note: this prompt still provides reasoning sometimes it could be not neccessary
+
     data = {"model": model_name, "prompt": review_text, "stream": True}
 
     try:
