@@ -8,16 +8,18 @@ headers = {"Content-Type": "application/json"}
 model_name = "llama3.2:latest"
 
 class SentimentResult:
-    def __init__(self, review_title, review_body, llm_response):
+    def __init__(self, review_title, review_body, llm_response, generated_response):
         self.review_title = review_title
         self.review_body = review_body
         self.llm_response = llm_response
+        self.generated_response = generated_response
 
     def to_dict(self):
         return {
             "Review Title": self.review_title,
             "Review Body": self.review_body,
-            "LLM Sentiment Analysis": self.llm_response
+            "LLM Sentiment Analysis": self.llm_response,
+            "Generated Response": self.generated_response
         }
 
 def chat_with_llm(session, review_title, review_body):
@@ -42,7 +44,7 @@ def chat_with_llm(session, review_title, review_body):
     Body: {review_body}
     """
 
-    data = {"model": model_name, "prompt": review_text, "stream": False}  # Set stream to False for simplicity
+    data = {"model": model_name, "prompt": review_text, "stream": False}
 
     try:
         response = session.post(URL, headers=headers, data=json.dumps(data))
@@ -54,11 +56,42 @@ def chat_with_llm(session, review_title, review_body):
     except requests.exceptions.RequestException as e:
         return f"Error: Unable to get response from the API. Details: {str(e)}"
 
-def analyze_reviews(df, output_file="sentiment_results.json"):
+def generate_response(llm_response):
     """
-    Analyze the reviews using the local LLM API and save the sentiment results to a JSON file.
+    Generate a response to the review based on the sentiment analysis of each aspect.
+    """
+    thank_you_notes = []
+    apologies = []
+
+    # Parse the LLM's response
+    for line in llm_response.splitlines():
+        # Only process lines that contain both "Aspect:" and "Sentiment:"
+        if "Aspect:" in line and "Sentiment:" in line:
+            try:
+                aspect = line.split(": ")[1].split(" - ")[0]
+                sentiment = line.split("Sentiment: ")[1].split(" ")[0]
+
+                if sentiment == "Positive":
+                    thank_you_notes.append(f"Thank you for appreciating {aspect}!")
+                elif sentiment == "Negative":
+                    apologies.append(f"We're sorry to hear about your experience with {aspect}. We'll work on improving it.")
+
+            except IndexError:
+                # Skip lines that don't match the expected format
+                print(f"Skipping unparseable line: {line}")
+                continue
+
+    # Combine thank yous and apologies into one response
+    return " ".join(thank_you_notes + apologies)
+
+def analyze_reviews(df, output_file="sentiment_results.json", num_rows=5):
+    """
+    Analyze a limited number of reviews using the local LLM API, generate responses, and save the sentiment results to a JSON file.
     """
     sentiment_results = []
+
+    # Limit the DataFrame to the first `num_rows` rows (ONLY FOR TESTING)
+    df = df.head(num_rows)
 
     # Reuse a single session for all requests
     with requests.Session() as session:
@@ -68,9 +101,10 @@ def analyze_reviews(df, output_file="sentiment_results.json"):
 
             # Send the review text to the LLM for sentiment analysis
             llm_response = chat_with_llm(session, review_title, review_body)
+            generated_response = generate_response(llm_response)
 
             # Create a result object and add it to the results list
-            sentiment_result = SentimentResult(review_title, review_body, llm_response)
+            sentiment_result = SentimentResult(review_title, review_body, llm_response, generated_response)
             sentiment_results.append(sentiment_result.to_dict())
 
     # Save all results to a JSON file
@@ -81,5 +115,5 @@ def analyze_reviews(df, output_file="sentiment_results.json"):
 # Load reviews from the CSV file
 df = pd.read_csv("p1w3/SentimentAssignmentReviewCorpus.csv")
 
-# Analyze the reviews and save the results to JSON
-analyze_reviews(df)
+# Analyze the first 'num_rows' reviews and save the results to JSON
+analyze_reviews(df, num_rows=5)
