@@ -1,13 +1,11 @@
-"""
-This script is for sentiment analysis using machine learning.
-"""
+import json
 
 import pandas as pd
 import spacy
 import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
 
-df = pd.read_csv("p1w3/SentimentAssignmentReviewCorpus.csv")
+df = pd.read_csv("SentimentAssignmentReviewCorpus.csv")
 
 nlp = spacy.load("en_core_web_sm")
 
@@ -89,11 +87,24 @@ for index, row in tqdm.tqdm(df.iterrows(), total=len(df), desc="Processing revie
     sentiment_result = analyze_review_aspects_auto(
         row["reviewTitle"], row["reviewBody"], sentiment_analysis_pipeline
     )
-    sentiment_results.append(sentiment_result)
 
-# Store the results back into the DataFrame
-df["sentiment_results"] = sentiment_results
+    # Sentiment results in json format
+    sentiment_results.append(
+        {
+            "review_title": sentiment_result.review_title,
+            "review_body": sentiment_result.review_body,
+            "Machine Learning Model Analysis": {
+                "overall_sentiment": {
+                    "label": sentiment_result.overall_sentiment["label"],
+                    "score": sentiment_result.overall_sentiment["score"],
+                },
+                "aspect_sentiments": sentiment_result.aspect_sentiments,
+            },
+        }
+    )
 
-# Print the sentiment results
-for sentiment_result in sentiment_results:
-    print(sentiment_result)
+# Save the sentiment results to a JSON file
+with open("sentiment_analysis_results.json", "w") as outfile:
+    json.dump(sentiment_results, outfile, indent=4)
+
+print("Sentiment analysis results saved to sentiment_analysis_results.json")
